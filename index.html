@@ -1,66 +1,66 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="bn">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Redirecting • BrilliantConnect</title>
+  <meta name="description" content="Smart redirect with graceful fallback if primary server is down." />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 40px;
-    }
-    .loading {
-      font-size: 18px;
-      color: #333;
-    }
+    body { font-family: sans-serif; text-align: center; padding: 40px; }
+    .loading { font-size: 18px; color: #444; }
+    a { color: #0066cc; text-decoration: none; }
   </style>
 </head>
 <body>
-  <div class="loading" id="statusMessage">
-    Trying to connect to the primary server…
-  </div>
+  <h1>চলমান…</h1>
+  <p class="loading" id="msg">প্রাইমারি সার্ভারে সংযোগের চেষ্টা হচ্ছে…</p>
+
+  <noscript>
+    JavaScript চালু নেই। সরাসরি এখানে যান:
+    <a href="http://192.168.20.120">Primary</a> •
+    <a href="https://wa.me/+8801310574797">Fallback</a>
+  </noscript>
 
   <script>
-    const STATUS_FILE = "https://brilliantpay.github.io/status.txt"; // URL of your status.txt
-    const PRIMARY_SITE = "http://192.168.20.11";
+    const PRIMARY_SITE = "http://192.168.20.120";
+    const STATUS_FILE = "https://brilliantpay.github.io/status.txt";
     const FALLBACK_SITE = "https://wa.me/+8801310574797";
-    const TIMEOUT = 4500; // 4.5 seconds
+    const TIMEOUT = 4500; // 4.5 সেকেন্ড
 
-    const statusMessage = document.getElementById("statusMessage");
+    const msg = document.getElementById("msg");
 
-    function redirect(url, message) {
-      statusMessage.textContent = message;
-      setTimeout(() => {
-        window.location.href = url;
-      }, 1000);
+    // Helper: Timeout Promise
+    function timeout(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // Set timeout for fallback
-    const timeoutHandle = setTimeout(() => {
-      redirect(FALLBACK_SITE, "Failed to connect to the primary server. Redirecting to fallback link…");
-    }, TIMEOUT);
-
-    fetch(STATUS_FILE)
-      .then(response => response.text())
-      .then(status => {
-        clearTimeout(timeoutHandle);
-        if (status.trim() === "OK") {
-          redirect(PRIMARY_SITE, "Primary server is up. Redirecting now…");
+    // Check status.txt first
+    fetch(STATUS_FILE, { cache: "no-store" })
+      .then(response => {
+        if (!response.ok) throw new Error("Status check failed");
+        return response.text();
+      })
+      .then(text => {
+        if (text.trim().toUpperCase() === "OK") {
+          msg.textContent = "প্রাইমারি সার্ভার সচল। রিডাইরেক্ট করা হচ্ছে…";
+          window.location.href = PRIMARY_SITE;
         } else {
-          redirect(FALLBACK_SITE, "Primary server is down. Redirecting to fallback link…");
+          throw new Error("Status says DOWN");
         }
       })
       .catch(() => {
-        clearTimeout(timeoutHandle);
-        redirect(FALLBACK_SITE, "Connection failed. Redirecting to fallback link…");
+        msg.textContent = "প্রাইমারি সার্ভারে সংযোগ ব্যর্থ। বিকল্প লিংকে নেওয়া হচ্ছে…";
+        // Backup: Try primary site directly for TIMEOUT ms
+        Promise.race([
+          fetch(PRIMARY_SITE, { mode: "no-cors" }),
+          timeout(TIMEOUT)
+        ]).then(() => {
+          // Even if opaque, assume reachable
+          window.location.href = PRIMARY_SITE;
+        }).catch(() => {
+          window.location.href = FALLBACK_SITE;
+        });
       });
   </script>
-
-  <noscript>
-    JavaScript is disabled. Go directly here: 
-    <a href="http://192.168.20.11">Primary</a> • 
-    <a href="https://wa.me/+8801310574797">Fallback</a>
-  </noscript>
 </body>
 </html>
