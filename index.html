@@ -1,66 +1,102 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Redirecting • BrilliantConnect</title>
-  <meta name="description" content="Smart redirect with graceful fallback if primary server is down." />
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 40px; }
-    .loading { font-size: 18px; color: #444; }
-    a { color: #0066cc; text-decoration: none; }
+    :root{--fg:#111;--muted:#555;}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:48px;text-align:center}
+    .msg{font-size:18px;color:var(--fg)}
+    .muted{margin-top:10px;color:var(--muted);font-size:14px}
+    .row{margin-top:14px}
+    a{color:#0b6bff;text-decoration:none}
+    code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
   </style>
 </head>
 <body>
-  <h1>চলমান…</h1>
-  <p class="loading" id="msg">প্রাইমারি সার্ভারে সংযোগের চেষ্টা হচ্ছে…</p>
+  <h1>Working…</h1>
+  <p class="msg" id="status">Checking status file…</p>
+  <p class="muted" id="detail"></p>
 
   <noscript>
-    JavaScript চালু নেই। সরাসরি এখানে যান:
-    <a href="http://192.168.20.120">Primary</a> •
-    <a href="https://wa.me/+8801310574797">Fallback</a>
+    JavaScript is disabled. Go directly:
+    <div class="row">
+      <a href="http://192.168.20.120">Primary</a> •
+      <a href="https://wa.me/+8801310574797">Fallback</a>
+    </div>
   </noscript>
 
   <script>
-    const PRIMARY_SITE = "http://192.168.20.120";
-    const STATUS_FILE = "https://brilliantpay.github.io/status.txt";
-    const FALLBACK_SITE = "https://wa.me/+8801310574797";
-    const TIMEOUT = 4500; // 4.5 সেকেন্ড
+    // ======= CHANGE THESE =======
+    const STATUS_FILE  = "./status.txt";                 // Same-origin file recommended
+    const PRIMARY_SITE = "http://192.168.20.120";      // Your primary destination
+    const FALLBACK_SITE= "https://wa.me/+8801310574797"; // Your fallback destination
+    // ============================
 
-    const msg = document.getElementById("msg");
+    const TIMEOUT_STATUS  = 4500; // ms to wait for status.txt
+    const TIMEOUT_PRIMARY = 3000; // ms to probe primary quickly
 
-    // Helper: Timeout Promise
-    function timeout(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
+    const elStatus = document.getElementById("status");
+    const elDetail = document.getElementById("detail");
+    const DEBUG = new URLSearchParams(location.search).has("debug");
+
+    function setStatus(t, d=""){
+      elStatus.textContent = t;
+      elDetail.textContent = d;
+      if (DEBUG) console.log(t, d);
     }
 
-    // Check status.txt first
-    fetch(STATUS_FILE, { cache: "no-store" })
-      .then(response => {
-        if (!response.ok) throw new Error("Status check failed");
-        return response.text();
-      })
-      .then(text => {
-        if (text.trim().toUpperCase() === "OK") {
-          msg.textContent = "প্রাইমারি সার্ভার সচল। রিডাইরেক্ট করা হচ্ছে…";
-          window.location.href = PRIMARY_SITE;
-        } else {
-          throw new Error("Status says DOWN");
-        }
-      })
-      .catch(() => {
-        msg.textContent = "প্রাইমারি সার্ভারে সংযোগ ব্যর্থ। বিকল্প লিংকে নেওয়া হচ্ছে…";
-        // Backup: Try primary site directly for TIMEOUT ms
-        Promise.race([
-          fetch(PRIMARY_SITE, { mode: "no-cors" }),
-          timeout(TIMEOUT)
-        ]).then(() => {
-          // Even if opaque, assume reachable
-          window.location.href = PRIMARY_SITE;
-        }).catch(() => {
-          window.location.href = FALLBACK_SITE;
-        });
-      });
+    function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+    function fetchWithTimeout(url, ms, init={}){
+      const controller = new AbortController();
+      const timer = setTimeout(()=>controller.abort(), ms);
+      return fetch(url, { ...init, signal: controller.signal })
+        .finally(()=>clearTimeout(timer));
+    }
+
+    async function probePrimary(){
+      // no-cors => opaque response, but resolves if reachable at network level
+      await fetchWithTimeout(PRIMARY_SITE, TIMEOUT_PRIMARY, { mode: "no-cors", cache: "no-store" });
+    }
+
+    async function checkStatusFile(){
+      // Cache-bust to avoid stale results
+      const url = STATUS_FILE + (STATUS_FILE.includes("?") ? "&" : "?") + "t=" + Date.now();
+      const res = await fetchWithTimeout(url, TIMEOUT_STATUS, { cache: "no-store" });
+      if (!res.ok) throw new Error("Status file not reachable (" + res.status + ")");
+      const text = (await res.text()).trim().toUpperCase();
+      if (text !== "OK") throw new Error("Status not OK: " + text);
+      return true;
+    }
+
+    async function redirect(url){
+      if (DEBUG){
+        setStatus("DEBUG: Would redirect now", url);
+        return;
+      }
+      // Small UX delay lets user see the message
+      await sleep(300);
+      window.location.replace(url);
+    }
+
+    (async function main(){
+      try{
+        setStatus("Checking status file…", STATUS_FILE);
+        await checkStatusFile();
+
+        setStatus("Status OK. Probing primary…", PRIMARY_SITE);
+        await probePrimary();
+
+        setStatus("Primary reachable. Redirecting…", PRIMARY_SITE);
+        await redirect(PRIMARY_SITE);
+
+      } catch (e){
+        setStatus("Primary not reachable. Redirecting to fallback…", (e && e.message) ? e.message : String(e));
+        await redirect(FALLBACK_SITE);
+      }
+    })();
   </script>
 </body>
 </html>
