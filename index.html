@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Redirecting • BrilliantConnect</title>
+  <meta name="description" content="Smart redirect with graceful fallback if primary server is down." />
+  <style>
+    /* =======================
+       Minimal, modern, single-file CSS
+       ======================= */
+    :root{
+      --bg: #0b1020;
+      --fg: #e6e9f2;
+      --muted: #b7bfd8;
+      --accent: #6ee7ff;
+      --accent-2:#7c8cff;
+      --card: rgba(255,255,255,0.06);
+      --glass: rgba(255,255,255,0.09);
+      --border: rgba(255,255,255,0.15);
+      --success:#28d97a;
+      --warn:#ffcc66;
+      --error:#ff6b6b;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      color:var(--fg);
+      background: radial-gradient(1200px 800px at 20% 10%, #1a2b5f 0%, transparent 60%),
+                  radial-gradient(1000px 700px at 80% 90%, #0c3c58 0%, transparent 60%),
+                  radial-gradient(900px 600px at 60% 30%, #22295a 0%, transparent 70%),
+                  var(--bg);
+      overflow:hidden;
+    }
+
+    /* animated gradient glow blobs */
+    .blob{
+      position:absolute; filter: blur(60px); opacity:.55; pointer-events:none; z-index:0;
+      mix-blend-mode:screen;
+    }
+    .b1{width:460px;height:460px;background:radial-gradient(circle at 30% 30%, #2ad7ff, transparent 60%); left:-100px; top:-80px; animation: float1 9s ease-in-out infinite;}
+    .b2{width:520px;height:520px;background:radial-gradient(circle at 70% 60%, #7a7cff, transparent 60%); right:-120px; bottom:-120px; animation: float2 11s ease-in-out infinite;}
+    @keyframes float1{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(18px)} }
+    @keyframes float2{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(-10px, -14px)} }
+
+    .wrap{
+      position:relative; z-index:1;
+      height:100%; display:grid; place-items:center; padding:24px;
+    }
+    .card{
+      width:min(720px, 92vw);
+      background:linear-gradient(180deg, var(--glass), rgba(255,255,255,0.03));
+      border:1px solid var(--border);
+      border-radius:24px;
+      box-shadow: 0 20px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+      padding:28px 26px;
+      backdrop-filter: blur(12px);
+    }
+    .header{
+      display:flex; align-items:center; gap:14px; margin-bottom:10px;
+    }
+    .logo{
+      width:44px;height:44px;border-radius:12px;
+      background: conic-gradient(from 180deg at 50% 50%, var(--accent), var(--accent-2), var(--accent));
+      box-shadow: 0 6px 26px rgba(110,231,255,.4);
+      position:relative; overflow:hidden;
+    }
+    .logo::after{
+      content:""; position:absolute; inset:2px; border-radius:10px; background:rgba(11,16,32,.75);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .title{font-weight:700;font-size:1.25rem;letter-spacing:.2px}
+    .subtitle{color:var(--muted);font-size:.95rem;margin-top:4px}
+
+    .status{
+      display:flex; align-items:center; gap:10px; margin:18px 0 14px;
+      font-size:.98rem;
+      padding:10px 12px; border:1px dashed var(--border); border-radius:12px; background:rgba(255,255,255,0.04)
+    }
+    .dot{
+      width:10px;height:10px;border-radius:999px; background:var(--warn);
+      box-shadow:0 0 0 0 rgba(255,204,102,.7);
+      animation:pulse 1.8s ease infinite;
+    }
+    @keyframes pulse{
+      0%{box-shadow:0 0 0 0 rgba(255,204,102,.7)}
+      70%{box-shadow:0 0 0 12px rgba(255,204,102,0)}
+      100%{box-shadow:0 0 0 0 rgba(255,204,102,0)}
+    }
+
+    .progress{
+      position:relative; height:10px; background:rgba(255,255,255,.06);
+      border:1px solid var(--border); border-radius:999px; overflow:hidden;
+      margin:14px 0 6px;
+    }
+    .bar{
+      position:absolute; inset:0 auto 0 0; width:0%;
+      background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      box-shadow: 0 6px 22px rgba(110,231,255,.35);
+      transition: width .3s ease;
+    }
+
+    .grid{
+      display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px
+    }
+    .pill{
+      border:1px solid var(--border); border-radius:14px; padding:10px 12px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      background:rgba(255,255,255,.04); color:var(--muted); font-size:.92rem
+    }
+    .pill b{color:var(--fg)}
+    .btns{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap}
+    .btn{
+      appearance:none; border:1px solid var(--border); background:var(--card);
+      color:var(--fg); padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:600;
+      transition: transform .08s ease, border-color .2s ease, background .2s ease;
+      text-decoration:none; display:inline-flex; align-items:center; gap:8px;
+    }
+    .btn:hover{transform:translateY(-1px); border-color:rgba(255,255,255,.25)}
+    .btn.primary{background:linear-gradient(180deg, rgba(110,231,255,.20), rgba(110,231,255,.08)); border-color:rgba(110,231,255,.35)}
+    .btn.success{background:linear-gradient(180deg, rgba(40,217,122,.20), rgba(40,217,122,.08)); border-color:rgba(40,217,122,.35)}
+
+    .foot{
+      color:var(--muted); font-size:.85rem; margin-top:12px; text-align:center;
+    }
+
+    @media (max-width:640px){
+      .grid{grid-template-columns:1fr}
+      .title{font-size:1.15rem}
+    }
+    noscript{
+      display:block; margin-top:12px; color:var(--muted); font-size:.95rem
+    }
+  </style>
+</head>
+<body>
+  <!-- fancy background blobs -->
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+
+  <div class="wrap">
+    <main class="card" role="main" aria-live="polite">
+      <div class="header">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <div class="title">BrilliantConnect • Smart Redirect</div>
+          <div class="subtitle">If the main server is unavailable, you will be automatically redirected to the backup link.</div>
+        </div>
+      </div>
+
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="statusText">Checking primary server status…</span>
+      </div>
+
+      <div class="progress" aria-hidden="true">
+        <div class="bar" id="bar"></div>
+      </div>
+
+      <div class="grid">
+        <div class="pill"><span>Primary URL</span> <b id="pLabel"></b></div>
+        <div class="pill"><span>Fallback URL</span> <b id="fLabel"></b></div>
+      </div>
+
+      <div class="btns">
+        <a class="btn primary" id="goPrimary" href="#" rel="nofollow">Go Primary</a>
+        <a class="btn success" id="goFallback" href="#" rel="nofollow">Go Fallback</a>
+      </div>
+
+      <p class="foot">Auto-redirect Processing… If you are not redirected automatically, please use the buttons above.</p>
+
+      <noscript>
+        JavaScript If not available, go directly here:
+        <a href="https://www.facebook.com/bangladeshansarandvdp24x7/">Primary</a> •
+        <a href="https://brilliantpay.github.io/">Fallback</a>
+      </noscript>
+    </main>
+  </div>
+
+  <script>
+    /*
+      ==========================
+      CONFIG: You just need to change these 3 things.
+      ==========================
+    */
+    const PRIMARY_URL  = "https://www.facebook.com/bangladeshansarandvdp24x7/"; // <-- Your first link
+    const FALLBACK_URL = "https://brilliantpay.github.io/";                      // <-- Your 2nd link
+    const TIMEOUT_MS   = 4500;  // Fallback will trigger after (4.5 seconds)
+
+    // UI labels
+    document.getElementById('pLabel').textContent = PRIMARY_URL.replace(/^https?:\/\//,'');
+    document.getElementById('fLabel').textContent = FALLBACK_URL.replace(/^https?:\/\//,'');
+    document.getElementById('goPrimary').href = PRIMARY_URL;
+    document.getElementById('goFallback').href = FALLBACK_URL;
+
+    // tiny progress animation (visual only)
+    const bar = document.getElementById('bar');
+    let progress = 0;
+    const progTimer = setInterval(() => {
+      progress = Math.min(96, progress + Math.random()*7);
+      bar.style.width = progress.toFixed(1) + '%';
+    }, 180);
+
+    const statusText = document.getElementById('statusText');
+    const dot = document.getElementById('dot');
+
+    // Helper: timeout-able fetch using AbortController
+    function fetchWithTimeout(url, ms, opts = {}) {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), ms);
+      const options = Object.assign({ mode: 'no-cors', cache: 'no-store' }, opts, { signal: controller.signal });
+      // note: no-cors gives opaque response, but resolves if server is reachable.
+      return fetch(url, options).finally(() => clearTimeout(id));
+    }
+
+    async function smartRedirect() {
+      try {
+        // 1) Try hitting PRIMARY. If it responds (even opaquel y), we consider it UP.
+        statusText.textContent = "Attempting to connect to the primary server…";
+        await fetchWithTimeout(PRIMARY_URL, TIMEOUT_MS, { method: 'GET' });
+
+        // success: go primary
+        dot.style.background = "var(--success)";
+        statusText.textContent = "Primary server is active. Redirecting…";
+        bar.style.width = '100%';
+        clearInterval(progTimer);
+        // small delay for UX polish
+        setTimeout(() => { window.location.replace(PRIMARY_URL); }, 400);
+
+      } catch (err) {
+        // network error / timeout => fallback
+        dot.style.background = "var(--error)";
+        statusText.textContent = "Primary server connection failed. Redirecting to the backup link…";
+        bar.style.width = '100%';
+        clearInterval(progTimer);
+        setTimeout(() => { window.location.replace(FALLBACK_URL); }, 400);
+      }
+    }
+
+    // Start
+    smartRedirect();
+  </script>
+</body>
+</html>
