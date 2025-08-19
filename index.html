@@ -1,102 +1,80 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Redirecting • BrilliantConnect</title>
-  <style>
-    :root{--fg:#111;--muted:#555;}
-    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:48px;text-align:center}
-    .msg{font-size:18px;color:var(--fg)}
-    .muted{margin-top:10px;color:var(--muted);font-size:14px}
-    .row{margin-top:14px}
-    a{color:#0b6bff;text-decoration:none}
-    code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
-  </style>
+  <title>Redirecting…</title>
+  <meta name="description" content="This page automatically redirects you to the target site." />
+
+  <!-- No-JS fallback (redirect after 2 seconds) -->
+  <meta http-equiv="refresh" content="2;url=https://cutt.ly/hrH5sbDV" />
+
+  <!-- Open Graph (nice preview when shared) -->
+  <meta property="og:title" content="Redirecting…" />
+  <meta property="og:description" content="Taking you to the destination." />
+  <meta property="og:type" content="website" />
+
+  <link rel="preconnect" href="https://cutt.ly" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Working…</h1>
-  <p class="msg" id="status">Checking status file…</p>
-  <p class="muted" id="detail"></p>
+  <main class="container">
+    <section class="card" role="status" aria-live="polite">
+      <div class="logo" aria-hidden="true">
+        <!-- Small SVG icon -->
+        <svg viewBox="0 0 24 24" class="logo-svg" aria-hidden="true" focusable="false">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.88L18.18 22 12 18.77 5.82 22 7 14.15l-5-4.88 6.91-1.01L12 2z"/>
+        </svg>
+      </div>
 
-  <noscript>
-    JavaScript is disabled. Go directly:
-    <div class="row">
-      <a href="https://cutt.ly/4rH0TnjH">Primary</a> •
-      <a href="https://wa.me/+8801310574797">Fallback</a>
-    </div>
-  </noscript>
+      <h1>Redirecting…</h1>
+      <p class="muted">You’re being redirected to the target site. Just a moment…</p>
+
+      <div class="spinner" aria-hidden="true"></div>
+
+      <div class="progress" aria-hidden="true">
+        <div class="bar" id="bar"></div>
+      </div>
+
+      <p class="fallback">
+        If it doesn’t happen automatically,
+        <a href="https://cutt.ly/hrH5sbDV" rel="nofollow noopener" referrerpolicy="no-referrer">
+          click here
+        </a>.
+      </p>
+    </section>
+
+    <footer class="footer">
+      <small>© <span id="year"></span> Redirect Page • GitHub Pages</small>
+    </footer>
+  </main>
 
   <script>
-    // ======= CHANGE THESE =======
-    const STATUS_FILE  = "./status.txt";                 // Same-origin file recommended
-    const PRIMARY_SITE = "https://cutt.ly/4rH0TnjH";      // Your primary destination
-    const FALLBACK_SITE= "https://wa.me/+8801310574797"; // Your fallback destination
-    // ============================
+    // Progress bar animation (~1.5s)
+    const bar = document.getElementById('bar');
+    let start = null;
+    const duration = 1500;
 
-    const TIMEOUT_STATUS  = 4500; // ms to wait for status.txt
-    const TIMEOUT_PRIMARY = 3000; // ms to probe primary quickly
-
-    const elStatus = document.getElementById("status");
-    const elDetail = document.getElementById("detail");
-    const DEBUG = new URLSearchParams(location.search).has("debug");
-
-    function setStatus(t, d=""){
-      elStatus.textContent = t;
-      elDetail.textContent = d;
-      if (DEBUG) console.log(t, d);
+    function animate(ts) {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      bar.style.transform = `scaleX(${progress})`;
+      if (progress < 1) requestAnimationFrame(animate);
     }
+    requestAnimationFrame(animate);
 
-    function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
-
-    function fetchWithTimeout(url, ms, init={}){
-      const controller = new AbortController();
-      const timer = setTimeout(()=>controller.abort(), ms);
-      return fetch(url, { ...init, signal: controller.signal })
-        .finally(()=>clearTimeout(timer));
-    }
-
-    async function probePrimary(){
-      // no-cors => opaque response, but resolves if reachable at network level
-      await fetchWithTimeout(PRIMARY_SITE, TIMEOUT_PRIMARY, { mode: "no-cors", cache: "no-store" });
-    }
-
-    async function checkStatusFile(){
-      // Cache-bust to avoid stale results
-      const url = STATUS_FILE + (STATUS_FILE.includes("?") ? "&" : "?") + "t=" + Date.now();
-      const res = await fetchWithTimeout(url, TIMEOUT_STATUS, { cache: "no-store" });
-      if (!res.ok) throw new Error("Status file not reachable (" + res.status + ")");
-      const text = (await res.text()).trim().toUpperCase();
-      if (text !== "OK") throw new Error("Status not OK: " + text);
-      return true;
-    }
-
-    async function redirect(url){
-      if (DEBUG){
-        setStatus("DEBUG: Would redirect now", url);
-        return;
+    // JS redirect (faster than meta refresh)
+    const target = "https://cutt.ly/hrH5sbDV";
+    setTimeout(() => {
+      try {
+        window.location.replace(target);
+      } catch {
+        window.location.href = target;
       }
-      // Small UX delay lets user see the message
-      await sleep(300);
-      window.location.replace(url);
-    }
+    }, 800);
 
-    (async function main(){
-      try{
-        setStatus("Checking status file…", STATUS_FILE);
-        await checkStatusFile();
-
-        setStatus("Status OK. Probing primary…", PRIMARY_SITE);
-        await probePrimary();
-
-        setStatus("Primary reachable. Redirecting…", PRIMARY_SITE);
-        await redirect(PRIMARY_SITE);
-
-      } catch (e){
-        setStatus("Primary not reachable. Redirecting to fallback…", (e && e.message) ? e.message : String(e));
-        await redirect(FALLBACK_SITE);
-      }
-    })();
+    // Footer year
+    document.getElementById('year').textContent = new Date().getFullYear();
   </script>
 </body>
 </html>
